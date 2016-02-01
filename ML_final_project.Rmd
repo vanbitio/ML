@@ -1,0 +1,97 @@
+---
+title: "Assignment: Prediction Assignment Writeup"
+date: "January 31, 2016"
+output: html_document
+---
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r}
+## Load libraries needed
+library(caret)
+library(randomForest)
+library(gbm)
+
+# Read in the data to use. 
+training = read.csv("~/Desktop/pml-training.csv", na.strings=c("","NA"))
+testing = read.csv("~/Desktop/pml-testing.csv", na.strings=c("","NA"))
+```
+
+## Exploring The Data
+```{r}
+names(training)
+## We see there are 160 variables and 19.6k rows in the training set.
+dim(training)
+## There are 5 levels of "classe", A-E.
+levels(training$classe)
+## We see there are 160 variables and 20 rows in the testing set.
+dim(testing)
+## By looking at the first 10 records in the testing set we can see there are a lot of NA values.
+## The first 7 columns do not seem to be relevant to predictions.
+names(testing)
+```
+
+## Cleaning The Data 
+```{r}
+## Use only relevant columns. Remove the first 7 columns 
+## (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window)
+trainingClean <- training[,-(1:7)]
+testingClean <- testing[,-(1:7)]
+## Remove columns with NA values.
+trainingClean <- trainingClean[,colSums(is.na(trainingClean)) == 0]
+testingClean <- testingClean[,colSums(is.na(testingClean)) == 0]
+## We are left with 53 columns in the training set and 53 in the test set.
+dim(trainingClean)
+dim(testingClean)
+```
+## Split & Subset The Data
+```{r}
+## We need to split the data for training and validation. 
+## We will do a 70/30 split for training/validation.
+inTrain <- createDataPartition(y=trainingClean$classe,p=0.7,list=FALSE)
+trainingCleanSlice <- trainingClean[inTrain,]
+validationCleanSlice <- trainingClean[-inTrain,]
+
+## Subset the data to just the columns that contain totals
+totalSubset <- trainingCleanSlice[, grepl("total", names(trainingCleanSlice))]
+
+## Show a density plot for this data subset
+featurePlot(x=totalSubset, y=trainingCleanSlice$classe, plot="density", scales=list(x=list(relation="free"), y=list(relation="free")), auto.key=list(columns=5))
+```
+
+## Prediction Models
+```{r}
+set.seed(32)
+
+## boosting with trees method
+modelGBM <- train(classe ~., data=trainingCleanSlice, method="gbm", verbose=FALSE)
+print(modelGBM)
+modelGBM$finalModel
+
+predictGBM <- predict(modelGBM, testingClean)
+summary(predictGBM)
+
+## random forest method
+modelRF <- train(classe ~., data=trainingCleanSlice, method="rf")
+print(modelRF)
+modelRF$finalModel
+
+predictRF <- predict(modelRF, testingClean)
+predictRF
+summary(predictRF)
+
+predictRFValid <- predict(modelRF, validationCleanSlice)
+results <- confusionMatrix(validationCleanSlice$classe, predictRFValid)
+results
+```
+## Results
+Testing two different prediction methods, it seems that predicting with random forests has a higher accuracy rate than gbm.  
+
+The random forest accuracy rate is 0.9935% and so the out of sample accuracy is 1-0.9935% = 0.0065%.
